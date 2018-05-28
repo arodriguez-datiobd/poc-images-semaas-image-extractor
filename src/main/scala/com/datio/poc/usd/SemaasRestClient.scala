@@ -13,8 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 
 
 object SemaasRestClient {
-//  val ENDPOINT_URL = "https://epsilon.play.global.semaas-spot.com/v2/ns/arodriguez.test/buckets/test.images.bucket/files/contrato_3_0_4557.jpg:download"
-//                        https://epsilon.play.global                   /ns/arodriguez.test/buckets/test.images.bucket/files/contrato_3_0_4557.jpg:download
+
   val ENDPOINT_URL = "https://epsilon.play.global.semaas-spot.com/v2/ns/arodriguez.test/buckets/test.images.bucket/files"
   val INITIAL_RESOURCE = "ns/arodriguez.test/buckets/test.images.bucket/files"
   val API_KEY = "94db014b-d2ab-4bee-84a8-79f010ea4ac6"
@@ -85,20 +84,24 @@ class SemaasRestClient(saveFolder: String) {
   }
 
   /**
-    * It parses the response retrieved from getFiles method to generate a list with just the files to download
+    * It parses the response retrieved from getFiles method to generate a list with just the files to download.
     *
-    * @param response
-    * @return
+    * The _locator attribute does not specify the endpoint for traversing the resource structure, it represents a logical resource location.
+    *
+    * @param response the response structure defined in getFiles.
+    * @return List of _locator
     */
-  def parseResponse(response : String): Option[List[String]] = {
+  def parseResponse(response : String): Option[List[(String)]] = {
 
+    //TODO change this method to return a tuple with the filename and the url endpoint. Include here the parsing and pattern matching code.
     val jsonSample = (new ObjectMapper).readValue(response, classOf[Object])
 
     JsonPath.query("$.files[*]._locator", jsonSample) match {
       case Left(errorMsg) =>
         println(errorMsg)
         None
-      case Right(iterator) =>  Some(iterator.toList.map(_.toString))
+      case Right(iterator) => Some(iterator.toList.map(_.toString))
+
     }
 
   }
@@ -112,6 +115,8 @@ class SemaasRestClient(saveFolder: String) {
     *
     */
   def downloadFile(resource: String): Option[(String, Array[Byte])] = {
+
+    // TODO move all the pattern matching to parseResponse method. This method should be structure agnostic.
 
     val nsPattern = "(.*)(/ns/.*)".r
     val nsPattern(server, rs) = resource

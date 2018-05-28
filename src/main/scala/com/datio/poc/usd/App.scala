@@ -7,7 +7,5 @@ package com.datio.poc.usd
 object Main extends App {
 
   val rc = new SemaasRestClient("/tmp/")
-  println( "Hello World!")
-
 
 }

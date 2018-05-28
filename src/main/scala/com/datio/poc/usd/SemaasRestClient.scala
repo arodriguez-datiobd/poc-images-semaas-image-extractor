@@ -5,11 +5,7 @@ import java.io.{BufferedOutputStream, FileOutputStream}
 import io.gatling.jsonpath.JsonPath
 import com.fasterxml.jackson.databind.ObjectMapper
 
-
-
-//import com.typesafe.scalalogging.LazyLogging
-
-//class SemaasRestClient extends LazyLogging {
+import com.typesafe.scalalogging.LazyLogging
 
 
 object SemaasRestClient {
@@ -22,20 +18,16 @@ object SemaasRestClient {
   val VERSION = "v2"
 }
 
-
-class SemaasRestClient(saveFolder: String) {
+class SemaasRestClient(saveFolder: String) extends LazyLogging {
 
   import SemaasRestClient.{API_KEY, ENDPOINT_URL, INITIAL_RESOURCE, SERVICE_URL, PROTOCOL, VERSION}
-
-  //  logger.debug("This is very convenient ;-)")
-
 
 
   val response = getFiles(PROTOCOL + "://" + SERVICE_URL + "/" + VERSION + "/" + INITIAL_RESOURCE)
   parseResponse(response) match {
     case Some(filesURL : List[String]) => (filesURL.map(downloadFile(_))).foreach(binaryFile => saveFile(binaryFile.get._2, saveFolder, binaryFile.get._1))
 
-    case None => println("Empty bucket, no files to download")
+    case None => logger.info("Empty bucket, no files to download")
   }
 
 
@@ -75,6 +67,8 @@ class SemaasRestClient(saveFolder: String) {
     */
   def getFiles(url: String): String = {
 
+    logger.debug("Retrieving data from: " + url)
+
     val response: HttpResponse[String] = Http(url)
       .header("API-KEY", API_KEY)
       .timeout(connTimeoutMs = 2000, readTimeoutMs = 5000)
@@ -98,7 +92,8 @@ class SemaasRestClient(saveFolder: String) {
 
     JsonPath.query("$.files[*]._locator", jsonSample) match {
       case Left(errorMsg) =>
-        println(errorMsg)
+        // TODO verify if reason is the correct field
+        logger.error("Error parsing data. " + errorMsg.reason)
         None
       case Right(iterator) => Some(iterator.toList.map(_.toString))
 
@@ -122,11 +117,11 @@ class SemaasRestClient(saveFolder: String) {
     val nsPattern(server, rs) = resource
 
     val endpoint: String = PROTOCOL + "://" + SERVICE_URL + "/" + VERSION + rs + ":download"
-    println("Downloading: " + endpoint)
+    logger.debug("Downloading: " + endpoint)
 
     val filePattern = "(.*?)([^/]*\\.\\w{3}$)".r
     val filePattern(path, filename) = resource
-    println(filename)
+    logger.debug("Saving with filename: " + filename)
 
     try {
       val response: HttpResponse[Array[Byte]] = Http(endpoint)
@@ -137,8 +132,8 @@ class SemaasRestClient(saveFolder: String) {
       Some(filename, response.body)
     } catch  {
       case t: Throwable =>
-        println("Error downloading file from: " + endpoint)
-        println(t)
+        logger.error("Error downloading file from: " + endpoint)
+        logger.debug(t.getMessage)
         None
     }
   }
@@ -154,7 +149,6 @@ class SemaasRestClient(saveFolder: String) {
     */
   def saveFile(byteArray: Array[Byte], path: String, fileName: String): Unit = {
 
-    println("File path for saving: " + path + fileName)
     val outputStream = new BufferedOutputStream(new FileOutputStream(path + fileName))
     outputStream.write(byteArray)
     outputStream.close()

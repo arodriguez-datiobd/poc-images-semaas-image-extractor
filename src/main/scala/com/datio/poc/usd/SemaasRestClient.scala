@@ -18,7 +18,7 @@ object SemaasRestClient {
   val VERSION = "v2"
 }
 
-class SemaasRestClient(saveFolder: String) extends LazyLogging {
+class SemaasRestClient(saveFolder: String, writer: Writer) extends LazyLogging {
 
   import SemaasRestClient.{API_KEY, ENDPOINT_URL, INITIAL_RESOURCE, SERVICE_URL, PROTOCOL, VERSION}
 
@@ -148,11 +148,9 @@ class SemaasRestClient(saveFolder: String) extends LazyLogging {
     *
     */
   def saveFile(byteArray: Array[Byte], path: String, fileName: String): Unit = {
-
-    val outputStream = new BufferedOutputStream(new FileOutputStream(path + fileName))
-    outputStream.write(byteArray)
-    outputStream.close()
+    writer.write(path, fileName, byteArray)
 
   }
+
 
 }

@@ -1,11 +1,14 @@
 package com.datio.poc.usd
 
+
 /**
- * Hello world!
- *
- */
+  * Hello world!
+  *
+  */
 object Main extends App {
 
-  val rc = new SemaasRestClient("/tmp/")
+  val config = new Configuration("application.conf")
+
+  val rc = new SemaasRestClient("/tmp/", new HdfsWriter(config))
 
 }

@@ -1,11 +1,9 @@
 package com.datio.poc.usd
 
-import scalaj.http.{Http, HttpResponse}
-import java.io.{BufferedOutputStream, FileOutputStream}
-import io.gatling.jsonpath.JsonPath
 import com.fasterxml.jackson.databind.ObjectMapper
-
 import com.typesafe.scalalogging.LazyLogging
+import io.gatling.jsonpath.JsonPath
+import scalaj.http.{Http, HttpResponse}
 
 
 object SemaasRestClient {
@@ -20,13 +18,13 @@ object SemaasRestClient {
 
 class SemaasRestClient(saveFolder: String, writer: Writer) extends LazyLogging {
 
-  import SemaasRestClient.{API_KEY, ENDPOINT_URL, INITIAL_RESOURCE, SERVICE_URL, PROTOCOL, VERSION}
+  import SemaasRestClient._
 
 
   val response = getFiles(PROTOCOL + "://" + SERVICE_URL + "/" + VERSION + "/" + INITIAL_RESOURCE)
   parseResponse(response) match {
-    case Some(filesURL : List[String]) => (filesURL.map(downloadFile(_))).foreach(binaryFile => saveFile(binaryFile.get._2, saveFolder, binaryFile.get._1))
-
+    //    case Some(files : List[(String, String)]) => (files.map(x => ((downloadFile(_1), _2))).foreach(binaryFile => saveFile(binaryFile._2, saveFolder, binaryFile._1)))
+    case Some(filesURL: List[(String, String)]) => (filesURL.map(x => (x._1, downloadFile(x._2)))).foreach(entry => saveFile(entry._2.get, saveFolder, entry._1))
     case None => logger.info("Empty bucket, no files to download")
   }
 
@@ -83,11 +81,10 @@ class SemaasRestClient(saveFolder: String, writer: Writer) extends LazyLogging {
     * The _locator attribute does not specify the endpoint for traversing the resource structure, it represents a logical resource location.
     *
     * @param response the response structure defined in getFiles.
-    * @return List of _locator
+    * @return List with a tuple (file name, file resource url for downloading)
     */
-  def parseResponse(response : String): Option[List[(String)]] = {
+  def parseResponse(response: String): Option[List[(String, String)]] = {
 
-    //TODO change this method to return a tuple with the filename and the url endpoint. Include here the parsing and pattern matching code.
     val jsonSample = (new ObjectMapper).readValue(response, classOf[Object])
 
     JsonPath.query("$.files[*]._locator", jsonSample) match {
@@ -95,9 +92,40 @@ class SemaasRestClient(saveFolder: String, writer: Writer) extends LazyLogging {
         // TODO verify if reason is the correct field
         logger.error("Error parsing data. " + errorMsg.reason)
         None
-      case Right(iterator) => Some(iterator.toList.map(_.toString))
+      case Right(iterator) => Some(iterator.toList.map(x => (parseFileName(x.toString), getResourceDownloadUrl(x.toString))))
 
     }
+
+  }
+
+  /**
+    * Given a _locator string this method retrieves the resource file name
+    *
+    * @param resource The _locator string retrieved from semaas
+    * @return The file name used in the _locator
+    *
+    */
+  def parseFileName(resource: String): String = {
+
+    val filePattern = "(.*?)([^/]*\\.\\w{3}$)".r
+    val filePattern(path, filename) = resource
+    filename
+
+  }
+
+  /**
+    * Given a _locator string with the resource the method generates the URL for downloading the resource
+    *
+    * @param resource The _locator string retrieved from semaas
+    * @return The resource URL for downloading to the resource
+    */
+  def getResourceDownloadUrl(resource: String): String = {
+
+    val nsPattern = "(.*)(/ns/.*)".r
+    val nsPattern(server, rs) = resource
+
+    val endpoint: String = PROTOCOL + "://" + SERVICE_URL + "/" + VERSION + rs + ":download"
+    endpoint
 
   }
 
@@ -105,23 +133,13 @@ class SemaasRestClient(saveFolder: String, writer: Writer) extends LazyLogging {
   /**
     * Retrieves the binary resource from SEMaaS bucket
     *
-    * @param resource The resource to download, it is a binary file stored on a bucket
+    * @param endpoint The resource to download, it is a binary file stored on a bucket
     * @return A tuple which contains, the file name of the resource, the file (binary data)
     *
     */
-  def downloadFile(resource: String): Option[(String, Array[Byte])] = {
+  def downloadFile(endpoint: String): Option[(Array[Byte])] = {
 
-    // TODO move all the pattern matching to parseResponse method. This method should be structure agnostic.
-
-    val nsPattern = "(.*)(/ns/.*)".r
-    val nsPattern(server, rs) = resource
-
-    val endpoint: String = PROTOCOL + "://" + SERVICE_URL + "/" + VERSION + rs + ":download"
     logger.debug("Downloading: " + endpoint)
-
-    val filePattern = "(.*?)([^/]*\\.\\w{3}$)".r
-    val filePattern(path, filename) = resource
-    logger.debug("Saving with filename: " + filename)
 
     try {
       val response: HttpResponse[Array[Byte]] = Http(endpoint)
@@ -129,8 +147,8 @@ class SemaasRestClient(saveFolder: String, writer: Writer) extends LazyLogging {
         .timeout(connTimeoutMs = 2000, readTimeoutMs = 5000)
         .asBytes
 
-      Some(filename, response.body)
-    } catch  {
+      Some(response.body)
+    } catch {
       case t: Throwable =>
         logger.error("Error downloading file from: " + endpoint)
         logger.debug(t.getMessage)
@@ -143,8 +161,8 @@ class SemaasRestClient(saveFolder: String, writer: Writer) extends LazyLogging {
     * Stores the binary data in the path with the specified filename
     *
     * @param byteArray File content in binary format
-    * @param path Path where file should be stored
-    * @param fileName The file name to store the file
+    * @param path      Path where file should be stored
+    * @param fileName  The file name to store the file
     *
     */
   def saveFile(byteArray: Array[Byte], path: String, fileName: String): Unit = {
